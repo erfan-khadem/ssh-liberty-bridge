@@ -124,7 +124,7 @@ func main() {
 			if len(ctx.User()) != 36 { // it isn't a UUID
 				return false
 			}
-			userString := ctx.User() + "-" + string(gossh.MarshalAuthorizedKey(key))
+			userString := ctx.User() + "::" + string(gossh.MarshalAuthorizedKey(key))
 			userString = strings.Trim(userString, "\n\t")
 			result := rdb.SIsMember(ctx, "ssh-server:users", userString)
 			res, err := result.Result()
