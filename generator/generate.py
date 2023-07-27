@@ -4,13 +4,16 @@ import uuid
 import argparse
 import redis
 import dotenv
+import json
+
 from string import Template
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ed25519
 
-redis_client: redis.Redis[str] = None
+redis_client: redis.Redis = None
 DEFAULT_CONFIG_PATH: str = "/var/www/html/ssh-server/"
+USERS_SET = "ssh-server:users"
 
 
 def is_valid_uuid_v4(input_str) -> bool:
@@ -40,7 +43,7 @@ def get_variable(
         tmp = None
         has_var = lvar in args.__dict__
         if has_var:
-            tmp = args.__dict__.get(tmp)
+            tmp = args.__dict__.get(lvar)
 
         if (
             not has_var
@@ -59,6 +62,7 @@ def get_variable(
         elif strict:
             raise e
         else:
+            print(f"Returning None for {lvar}")
             return None
 
 
@@ -72,7 +76,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--rem", type=str, default="", help="Configuration UUID to remove"
     )
-    parser.add_argument("--list", type=bool, default=False, help="List configurations")
+    parser.add_argument("--list", default=False, action="store_true", help="List configurations")
     parser.add_argument(
         "--config-path", type=str, default="", help="Path to configuration storage area"
     )
@@ -153,7 +157,7 @@ def generate(
     host_key = " ".join(host_key)
 
     with open(template_path, "r") as f:
-        template = Template(f.read)
+        template = Template(f.read())
 
     assert not template is None
 
@@ -170,15 +174,15 @@ def generate(
     )
 
     client_string = client_uuid + "::" + pub_bytes.decode()
-    if redis_client.sadd("ssh-server:users", client_string) != 1:
+    if redis_client.sadd(USERS_SET, client_string) != 1:
         raise RuntimeError("Cannot save the public key")
 
     client_config = template.substitute(
         server_addr=server_addr,
         server_port=server_port,
         client_uuid=client_uuid,
-        private_key=priv_bytes.decode(),
-        host_key=host_key,
+        private_key=json.dumps(priv_bytes.decode()),
+        host_key=json.dumps(host_key),
     )
 
     with open(path / (client_uuid + ".json"), "w") as f:
@@ -194,7 +198,7 @@ def remove_client(path: pathlib.Path, client_uuid: str) -> None:
     if not is_valid_uuid_v4(client_uuid):
         raise RuntimeError("Invalid UUIDv4 supplied")
 
-    members = redis_client.smembers("ssh-server:users")
+    members = redis_client.smembers(USERS_SET)
     client_string = None
     for m in members:
         if m.startswith(client_uuid):
@@ -204,8 +208,13 @@ def remove_client(path: pathlib.Path, client_uuid: str) -> None:
     if client_string is None:
         raise RuntimeError("Cannot find the specified client")
 
-    redis_client.srem("ssh-server:users", client_string)
-    os.remove(path / (client_uuid + ".json"))
+    redis_client.srem(USERS_SET, client_string)
+    redis_client.save()
+    try:
+        os.remove(path / (client_uuid + ".json"))
+    except Exception as e:
+        print("Could not delete the configuration file for the specified user:")
+        print(e)
 
 
 def main() -> None:
@@ -219,6 +228,7 @@ def main() -> None:
     redis_url = get_variable("redis_url", args, strict=True)
 
     config_path = pathlib.Path(config_path)
+    config_path.mkdir(parents=True, exist_ok=True)
 
     redis_client = redis.from_url(redis_url, decode_responses=True)
     if not redis_client.ping():
@@ -237,12 +247,13 @@ def main() -> None:
         remove_client(config_path, args.rem)
 
     if args.list:
-        members = redis_client.smembers("ssh-server:users")
+        members = redis_client.smembers(USERS_SET)
         for m in members:
             client_uuid = m.split("::")[0]
             print("Client UUID:\t\t" + client_uuid)
             print("Config Address:\t\t" + get_client_addr(host_addr, client_uuid))
             print("Client String:\t\t" + m)
+            print("--------------------")
 
 
 if __name__ == "__main__":
