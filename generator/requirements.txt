@@ -1,0 +1,3 @@
+python-dotenv
+cryptography
+redis==4.6.0

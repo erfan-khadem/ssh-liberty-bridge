@@ -1,14 +1,13 @@
+import argparse
+import glob
+import json
 import os
 import pathlib
 import uuid
-import argparse
-import redis
-import dotenv
-import json
-import glob
-
 from string import Template
 
+import dotenv
+import redis
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ed25519
 
@@ -77,7 +76,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--rem", type=str, default="", help="Configuration UUID to remove"
     )
-    parser.add_argument("--list", default=False, action="store_true", help="List configurations")
+    parser.add_argument(
+        "--list", default=False, action="store_true", help="List configurations"
+    )
+    parser.add_argument(
+        "--env",
+        type=str,
+        default="",
+        help="The file containing environmental variables",
+    )
     parser.add_argument(
         "--config-path", type=str, default="", help="Path to configuration storage area"
     )
@@ -224,8 +231,13 @@ def remove_client(path: pathlib.Path, client_uuid: str) -> None:
 
 def main() -> None:
     global redis_client
-    dotenv.load_dotenv()
     args = parse_args()
+
+    if len(args.env) > 0:
+        dotenv.load_dotenv(dotenv_path=args.env)
+    else:
+        dotenv.load_dotenv()
+
     host_addr = get_variable("host_addr", args, strict=True)
     config_path = get_variable(
         "config_path", args, strict=True, default=DEFAULT_CONFIG_PATH

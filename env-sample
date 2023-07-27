@@ -1,4 +1,4 @@
-# It is important to use a strong password for redis
+# It is vital to use a strong password for redis
 # We use database index 0 (the default one). You may change this in production
 REDIS_URL="redis://default:password1234@localhost:6379/0"
 
@@ -6,7 +6,7 @@ REDIS_URL="redis://default:password1234@localhost:6379/0"
 LISTEN_ADDR=":2222"
 
 # Storage path for user config files
-CONFIG_PATH="/tmp/ssh-users"
+CONFIG_PATH="~/ssh-users/"
 
 # The URL using which the users can download their configuration
 HOST_ADDR="http://localhost:8083/{uuid}.json"
@@ -26,4 +26,4 @@ HOST_KEY_PATH="/etc/ssh-server/"
 # $client_uuid
 # $private_key
 # $host_keys
-TEMPLATE_PATH="./template.json"
+TEMPLATE_PATH="./generator/template.json"
