@@ -38,46 +38,54 @@ func listKeys(dirPath string) (result []string, err error) {
 	return
 }
 
-func DirectTCPIPHandler(srv *ssh.Server, conn *gossh.ServerConn, newChan gossh.NewChannel, ctx ssh.Context) {
-	d := localForwardChannelData{}
-	if err := gossh.Unmarshal(newChan.ExtraData(), &d); err != nil {
-		newChan.Reject(gossh.ConnectionFailed, "error parsing forward data: "+err.Error())
-		return
+func directTCPIPClosure(rdb *redis.Client) ssh.ChannelHandler {
+	return func(srv *ssh.Server, conn *gossh.ServerConn, newChan gossh.NewChannel, ctx ssh.Context) {
+		d := localForwardChannelData{}
+		if err := gossh.Unmarshal(newChan.ExtraData(), &d); err != nil {
+			newChan.Reject(gossh.ConnectionFailed, "error parsing forward data: "+err.Error())
+			return
+		}
+
+		if srv.LocalPortForwardingCallback == nil || !srv.LocalPortForwardingCallback(ctx, d.DestAddr, d.DestPort) {
+			newChan.Reject(gossh.Prohibited, "port forwarding is disabled")
+			return
+		}
+
+		dest := net.JoinHostPort(d.DestAddr, strconv.FormatInt(int64(d.DestPort), 10))
+
+		var dialer net.Dialer
+		dconn, err := dialer.DialContext(ctx, "tcp", dest)
+		if err != nil {
+			newChan.Reject(gossh.ConnectionFailed, err.Error())
+			return
+		}
+
+		ch, reqs, err := newChan.Accept()
+		if err != nil {
+			dconn.Close()
+			return
+		}
+		go gossh.DiscardRequests(reqs)
+
+		go func() {
+			defer ch.Close()
+			defer dconn.Close()
+			result, _ := io.Copy(ch, dconn)
+			userID := ctx.User()
+			key := "ssh-server:network-usage:" + userID
+			rdb.HIncrBy(context.Background(), key, "bytes_read", result)
+			log.Printf("User %s read %d bytes", conn.Conn.User(), result)
+		}()
+		go func() {
+			defer ch.Close()
+			defer dconn.Close()
+			result, _ := io.Copy(dconn, ch)
+			userID := ctx.User()
+			key := "ssh-server:network-usage:" + userID
+			rdb.HIncrBy(context.Background(), key, "bytes_written", result)
+			log.Printf("User %s wrote %d bytes", conn.Conn.User(), result)
+		}()
 	}
-
-	if srv.LocalPortForwardingCallback == nil || !srv.LocalPortForwardingCallback(ctx, d.DestAddr, d.DestPort) {
-		newChan.Reject(gossh.Prohibited, "port forwarding is disabled")
-		return
-	}
-
-	dest := net.JoinHostPort(d.DestAddr, strconv.FormatInt(int64(d.DestPort), 10))
-
-	var dialer net.Dialer
-	dconn, err := dialer.DialContext(ctx, "tcp", dest)
-	if err != nil {
-		newChan.Reject(gossh.ConnectionFailed, err.Error())
-		return
-	}
-
-	ch, reqs, err := newChan.Accept()
-	if err != nil {
-		dconn.Close()
-		return
-	}
-	go gossh.DiscardRequests(reqs)
-
-	go func() {
-		defer ch.Close()
-		defer dconn.Close()
-		result, _ := io.Copy(ch, dconn)
-		log.Printf("User %s read %d bytes", conn.Conn.User(), result)
-	}()
-	go func() {
-		defer ch.Close()
-		defer dconn.Close()
-		result, _ := io.Copy(dconn, ch)
-		log.Printf("User %s wrote %d bytes", conn.Conn.User(), result)
-	}()
 }
 
 func parseHostKeyFile(keyFile string) (ssh.Signer, error) {
@@ -135,7 +143,7 @@ func main() {
 		}),
 		Addr: listenAddr,
 		ChannelHandlers: map[string]ssh.ChannelHandler{
-			"direct-tcpip": DirectTCPIPHandler,
+			"direct-tcpip": directTCPIPClosure(rdb),
 		},
 		PublicKeyHandler: func(ctx ssh.Context, key ssh.PublicKey) bool {
 			//log.Printf("User %s with key %s", ctx.User(), gossh.MarshalAuthorizedKey(key))
