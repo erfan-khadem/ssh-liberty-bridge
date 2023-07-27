@@ -15,8 +15,9 @@ HOST_ADDR="http://localhost:8083/{uuid}.json"
 SERVER_ADDR="127.0.0.1"
 SERVER_PORT=2222
 
-# The public key path of the server
-HOST_KEY_PATH="../etc/ssh/ssh_host_ed25519_key.pub"
+# The key path of the server
+# Must have trailing slash
+HOST_KEY_PATH="/etc/ssh-server/"
 
 # User configuration template file.
 # The following variables will be substituted:
@@ -24,5 +25,5 @@ HOST_KEY_PATH="../etc/ssh/ssh_host_ed25519_key.pub"
 # $server_port
 # $client_uuid
 # $private_key
-# $host_key
+# $host_keys
 TEMPLATE_PATH="./template.json"

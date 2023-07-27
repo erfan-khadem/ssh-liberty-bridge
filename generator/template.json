@@ -64,9 +64,7 @@
 			"server_port": $server_port,
 			"user": "$client_uuid",
 			"private_key": $private_key,
-			"host_key": [
-				$host_key
-			],
+			"host_key": $host_keys,
 			"client_version": "SSH-2.0-OpenSSH_7.4p1"
 		},
 		{

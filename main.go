@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -22,6 +23,19 @@ type localForwardChannelData struct {
 
 	OriginAddr string
 	OriginPort uint32
+}
+
+func listKeys(dirPath string) (result []string, err error) {
+	err = filepath.Walk(dirPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() && strings.HasSuffix(path, "_key") {
+			result = append(result, path)
+		}
+		return nil
+	})
+	return
 }
 
 func DirectTCPIPHandler(srv *ssh.Server, conn *gossh.ServerConn, newChan gossh.NewChannel, ctx ssh.Context) {
@@ -103,6 +117,10 @@ func main() {
 	if len(listenAddr) == 0 {
 		listenAddr = ":2222"
 	}
+	hostKeyPath := os.Getenv("HOST_KEY_PATH")
+	if len(hostKeyPath) == 0 {
+		hostKeyPath = "/root/etc/ssh/"
+	}
 	opts, err := redis.ParseURL(redisUrl)
 	if err != nil {
 		log.Fatalln(err)
@@ -151,10 +169,11 @@ func main() {
 		IdleTimeout: time.Minute * 1,
 		MaxTimeout:  time.Hour * 6,
 	}
-	hostKeyFiles := []string{
-		"./etc/ssh/ssh_host_ecdsa_key",
-		"./etc/ssh/ssh_host_ed25519_key",
-		"./etc/ssh/ssh_host_rsa_key"} // Replace with your key file paths
+
+	hostKeyFiles, err := listKeys(hostKeyPath)
+	if err != nil {
+		log.Fatalf("Could not get the host keys: %v\n", err)
+	}
 	for _, keyFile := range hostKeyFiles {
 		hostKey, err := parseHostKeyFile(keyFile)
 		if err != nil {

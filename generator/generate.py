@@ -5,6 +5,7 @@ import argparse
 import redis
 import dotenv
 import json
+import glob
 
 from string import Template
 
@@ -111,7 +112,7 @@ def parse_args() -> argparse.Namespace:
         "--host-key-path",
         type=str,
         default="",
-        help="ed25519 of the host clients are going to connect to",
+        help="Path to server's host keys",
     )
     parser.add_argument(
         "--template-path",
@@ -142,19 +143,23 @@ def generate(
     host_key_path = get_variable("host_key_path", args, strict=True)
     template_path = get_variable("template_path", args, strict=True)
 
-    assert host_key_path.endswith("ssh_host_ed25519_key.pub")
-
-    host_key = None
+    host_keys = []
     template = None
 
-    with open(host_key_path, "r") as f:
-        host_key = f.read().strip()
+    assert host_key_path.endswith("/")
 
-    assert not host_key is None
-    host_key = host_key.split()
-    if len(host_key) > 2:
-        host_key = host_key[:2]  # strip the hostname part
-    host_key = " ".join(host_key)
+    key_files = glob.glob(host_key_path + "*_key.pub")
+
+    for file_name in key_files:
+        with open(file_name, "r") as f:
+            host_key = f.read().strip()
+            host_key = host_key.split()
+            if len(host_key) > 2:
+                host_key = host_key[:2]  # strip the hostname part
+            host_key = " ".join(host_key)
+            host_keys.append(host_key)
+
+    assert not host_keys.empty()
 
     with open(template_path, "r") as f:
         template = Template(f.read())
@@ -182,7 +187,7 @@ def generate(
         server_port=server_port,
         client_uuid=client_uuid,
         private_key=json.dumps(priv_bytes.decode()),
-        host_key=json.dumps(host_key),
+        host_keys=json.dumps(host_keys),
     )
 
     with open(path / (client_uuid + ".json"), "w") as f:
