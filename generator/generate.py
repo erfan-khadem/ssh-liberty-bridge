@@ -14,6 +14,7 @@ from cryptography.hazmat.primitives.asymmetric import ed25519
 redis_client: redis.Redis = None
 DEFAULT_CONFIG_PATH: str = "/var/www/html/ssh-server/"
 USERS_SET = "ssh-server:users"
+USERS_USAGE = "ssh-server:network-usage"
 
 
 def is_valid_uuid_v4(input_str) -> bool:
@@ -129,6 +130,12 @@ def parse_args() -> argparse.Namespace:
     )
     return parser.parse_args()
 
+
+def get_client_sent(client_uuid: str) -> int:
+    return redis_client.hincrby(USERS_USAGE + ":" + client_uuid, "bytes_written", 0)
+
+def get_client_received(client_uuid: str) -> int:
+    return redis_client.hincrby(USERS_USAGE + ":" + client_uuid, "bytes_read", 0)
 
 def get_client_addr(host_addr: str, client_uuid: str) -> str:
     return host_addr.format(uuid=client_uuid)
@@ -270,6 +277,8 @@ def main() -> None:
             print("Client UUID:\t\t" + client_uuid)
             print("Config Address:\t\t" + get_client_addr(host_addr, client_uuid))
             print("Client String:\t\t" + m)
+            print("Client Sent Data:\t\t" + str(round(get_client_sent(client_uuid) / 1e6)) + " MB")
+            print("Client Received Data:\t\t" + str(round(get_client_received(client_uuid) / 1e6)) + " MB")
             print("--------------------")
 
 
