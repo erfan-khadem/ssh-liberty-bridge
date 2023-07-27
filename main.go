@@ -107,7 +107,7 @@ func main() {
 	if err != nil {
 		log.Fatalln(err)
 	}
-	rdb := redis.NewClient(opts)
+	rdb := redis.NewClient(opts) // This is safe to use concurrently
 	rdb.Del(context.Background(), "ssh-server:connections")
 	server := ssh.Server{
 		LocalPortForwardingCallback: ssh.LocalPortForwardingCallback(func(ctx ssh.Context, dhost string, dport uint32) bool {
