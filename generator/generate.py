@@ -159,7 +159,7 @@ def generate(
             host_key = " ".join(host_key)
             host_keys.append(host_key)
 
-    assert not host_keys.empty()
+    assert len(host_keys) > 0
 
     with open(template_path, "r") as f:
         template = Template(f.read())
