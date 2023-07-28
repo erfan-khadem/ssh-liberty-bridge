@@ -72,8 +72,7 @@ func directTCPIPClosure(rdb *redis.Client) ssh.ChannelHandler {
 			defer dconn.Close()
 			result, _ := io.Copy(ch, dconn)
 			userID := ctx.User()
-			key := "ssh-server:network-usage:" + userID
-			rdb.HIncrBy(context.Background(), key, "bytes_read", result)
+			rdb.HIncrBy(context.Background(), "ssh-server:users-usage", userID, result)
 			log.Printf("User %s read %d bytes", conn.Conn.User(), result)
 		}()
 		go func() {
@@ -81,8 +80,7 @@ func directTCPIPClosure(rdb *redis.Client) ssh.ChannelHandler {
 			defer dconn.Close()
 			result, _ := io.Copy(dconn, ch)
 			userID := ctx.User()
-			key := "ssh-server:network-usage:" + userID
-			rdb.HIncrBy(context.Background(), key, "bytes_written", result)
+			rdb.HIncrBy(context.Background(), "ssh-server:users-usage", userID, result)
 			log.Printf("User %s wrote %d bytes", conn.Conn.User(), result)
 		}()
 	}

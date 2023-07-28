@@ -2,9 +2,18 @@ import argparse
 import glob
 import json
 import os
-import pathlib
+import json
+import glob
 import uuid
+import redis
+import dotenv
+import pathlib
+import argparse
+
 from string import Template
+from generator.settings import USERS_SET, USERS_USAGE, DEFAULT_CONFIG_PATH
+from generator.options import Options
+from generator.utils import is_valid_uuid_v4, get_variable
 
 import dotenv
 import redis
@@ -12,130 +21,14 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ed25519
 
 redis_client: redis.Redis = None
-DEFAULT_CONFIG_PATH: str = "/var/www/html/ssh-server/"
-USERS_SET = "ssh-server:users"
-USERS_USAGE = "ssh-server:network-usage"
 
+def get_client_usage(client_uuid: str, reset: bool = False) -> int:
+    global redis_client
+    value = redis_client.hget(USERS_USAGE, client_uuid)
 
-def is_valid_uuid_v4(input_str) -> bool:
-    try:
-        uuid_obj = uuid.UUID(input_str, version=4)
-        return str(uuid_obj) == input_str
-    except ValueError:
-        return False
-
-
-def get_variable(
-    variable: str,
-    args: argparse.Namespace,
-    strict: bool = False,
-    default: str | None = None,
-) -> str | None:
-    """
-    Gets the requested variable from args or environmental variables
-
-    First try to find the variable in `args`, then in the environment variables.
-    If `default` is provided, in case `strict` is True, `default` is returned.
-    If `strict` is False and the variable is not found, None is returned regardless of the state of default
-    """
-    lvar = variable.lower()
-    uvar = variable.upper()
-    try:
-        tmp = None
-        has_var = lvar in args.__dict__
-        if has_var:
-            tmp = args.__dict__.get(lvar)
-
-        if (
-            not has_var
-            or (type(tmp) == str and len(tmp) == 0)
-            or (type(tmp) == int and tmp == -1)
-        ):
-            result = os.getenv(uvar)
-            if result is None:
-                raise RuntimeError("Required variable not found: " + uvar)
-            return result
-
-        return str(tmp)
-    except Exception as e:
-        if not default is None:
-            return default
-        elif strict:
-            raise e
-        else:
-            print(f"Returning None for {lvar}")
-            return None
-
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Client management tool for ssh-server"
-    )
-    parser.add_argument(
-        "--add", type=int, default=0, help="Number of new configurations to generate"
-    )
-    parser.add_argument(
-        "--rem", type=str, default="", help="Configuration UUID to remove"
-    )
-    parser.add_argument(
-        "--list", default=False, action="store_true", help="List configurations"
-    )
-    parser.add_argument(
-        "--env",
-        type=str,
-        default="",
-        help="The file containing environmental variables",
-    )
-    parser.add_argument(
-        "--config-path", type=str, default="", help="Path to configuration storage area"
-    )
-    parser.add_argument(
-        "--add-with-uuid",
-        type=str,
-        default="",
-        help="Add one configuration with the specified uuid",
-    )
-    parser.add_argument(
-        "--redis-url", type=str, default="", help="Redis database to connect to"
-    )
-    parser.add_argument(
-        "--host-addr",
-        type=str,
-        default="",
-        help="Host address to download client configs from. The client UUID replaces {uuid} part in the given string",
-    )
-    parser.add_argument(
-        "--server-addr",
-        type=str,
-        default="",
-        help="Server address for the clients to connect to",
-    )
-    parser.add_argument(
-        "--server-port",
-        type=int,
-        default=-1,
-        help="Server port for the clients to connect to. Read from environmental variables or .env by default",
-    )
-    parser.add_argument(
-        "--host-key-path",
-        type=str,
-        default="",
-        help="Path to server's host keys",
-    )
-    parser.add_argument(
-        "--template-path",
-        type=str,
-        default="",
-        help="Client configuration template file path",
-    )
-    return parser.parse_args()
-
-
-def get_client_sent(client_uuid: str) -> int:
-    return redis_client.hincrby(USERS_USAGE + ":" + client_uuid, "bytes_written", 0)
-
-def get_client_received(client_uuid: str) -> int:
-    return redis_client.hincrby(USERS_USAGE + ":" + client_uuid, "bytes_read", 0)
+    if reset:
+        redis_client.hincrby(USERS_USAGE, client_uuid, -value)
+    return value
 
 def get_client_addr(host_addr: str, client_uuid: str) -> str:
     return host_addr.format(uuid=client_uuid)
@@ -213,6 +106,9 @@ def generate(
 
 
 def remove_client(path: pathlib.Path, client_uuid: str) -> None:
+    """
+    Remove the client with the specified UUID
+    """
     global redis_client
     if not is_valid_uuid_v4(client_uuid):
         raise RuntimeError("Invalid UUIDv4 supplied")
@@ -235,15 +131,65 @@ def remove_client(path: pathlib.Path, client_uuid: str) -> None:
         print("Could not delete the configuration file for the specified user:")
         print(e)
 
+def reset_client_usage(args: argparse.Namespace) -> None:
+    """
+    Reset the usage of the client(s) specified in the arguments
+    """
+    if args.all or args.a:
+        try:
+            print("All users data usages will be purged.\n\nAre you sure? (y, n): ")
+            if input()[0] != 'y':
+                return
+            print("Reset confirmed.")
+
+            members = redis_client.smembers(USERS_SET)
+            for m in members:
+                client_uuid = m.split("::")[0]
+                print("Client UUID:\t\t" + client_uuid)
+                print("Client Data Usage:\t\t" + str(round(get_client_usage(client_uuid, reset=True) / 1e6)) + " MB")
+                print("--------------------")
+        except Exception as e:
+            print("ERORR: " + e)
+            print("Opertation terminated.")
+        else:
+            print("\nAll users usage have been reset successfully.")
+    else:
+        for client_uuid in filter(is_valid_uuid_v4, args.reset):
+            print("Client UUID:\t\t" + client_uuid)
+            print("Client Data Usage:\t\t" + str(round(get_client_usage(client_uuid, reset=True) / 1e6)) + " MB")
+            print("--------------------")
+        print("\nAll these users usage have been reset successfully.")
+
+def show_client_usage(args: argparse.Namespace) -> None:
+    """
+    Show the usage of the client(s) specified in the arguments in descending order
+    """
+    if args.all or args.a:
+        try:
+            members = redis_client.smembers(USERS_SET)
+            usage_list = sorted([(get_client_usage(m.split("::")[0]), m.split("::")[0]) for m in members], reverse=True)
+            print("All users data usages in descending order:\n\n")
+            for usage, client_uuid in usage_list:
+                print(f"{client_uuid}:\t\t{str(round(usage / 1e6))} MB")
+                print("--------------------")
+        except Exception as e:
+            print("ERORR: " + e)
+            print("Opertation terminated.")
+    else:
+        clients = filter(is_valid_uuid_v4, args.show_usage)
+        usage_list = sorted([(get_client_usage(client), client) for client in clients], reverse=True)
+        for usage, client_uuid in usage_list:
+            print(f"{client_uuid}:\t\t{str(round(usage / 1e6))} MB")
+            print("--------------------")
 
 def main() -> None:
     global redis_client
-    args = parse_args()
+    dotenv.load_dotenv()
+    args = Options.args
 
-    if len(args.env) > 0:
-        dotenv.load_dotenv(dotenv_path=args.env)
-    else:
-        dotenv.load_dotenv()
+    if args.reset:
+        reset_client_usage(args)
+        return
 
     host_addr = get_variable("host_addr", args, strict=True)
     config_path = get_variable(
@@ -270,16 +216,18 @@ def main() -> None:
     if len(args.rem) > 0:
         remove_client(config_path, args.rem)
 
-    if args.list:
+    if args.list or args.l:
         members = redis_client.smembers(USERS_SET)
         for m in members:
             client_uuid = m.split("::")[0]
             print("Client UUID:\t\t" + client_uuid)
             print("Config Address:\t\t" + get_client_addr(host_addr, client_uuid))
             print("Client String:\t\t" + m)
-            print("Client Sent Data:\t\t" + str(round(get_client_sent(client_uuid) / 1e6)) + " MB")
-            print("Client Received Data:\t\t" + str(round(get_client_received(client_uuid) / 1e6)) + " MB")
+            print("Client Data Usage:\t\t" + str(round(get_client_usage(client_uuid) / 1e6)) + " MB")
             print("--------------------")
+
+    if args.show_usage:
+        show_client_usage(args)
 
 
 if __name__ == "__main__":
