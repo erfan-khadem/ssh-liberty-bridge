@@ -69,7 +69,7 @@ First, make sure that `TEMPLATE_PATH` in your `.env` is correctly set.
 Then run the following command to see the supported commands by your configuration generator:
 
 ```bash
-python3 generator/generate.py --help
+python3 main.py --help
 ```
 
 Note that almost any variable specified by `.env` file can be overrided using the cli interface
@@ -79,17 +79,17 @@ location, you may provide it to your code using the `--env` flag.
 For example, to add 5 new users, do the following:
 
 ```bash
-python3 generator/generate.py --env /path/to/.env --add 5
+python3 main.py --env /path/to/.env --add 5
 ```
 
 And to list the available configurations, run:
 
 ```bash
-python3 generator/generate.py --env /path/to/.env --list
+python3 main.py --env /path/to/.env --list
 ```
 
 And to remove a configuration:
 
 ```bash
-python3 generator/generate.py --env /path/to/.env --rem (UUID of the client to remove from above)
+python3 main.py --env /path/to/.env --rem (UUID of the client to remove from above)
 ```
