@@ -2,33 +2,35 @@ import argparse
 import glob
 import json
 import os
-import json
-import glob
-import uuid
-import redis
-import dotenv
 import pathlib
-import argparse
-
+import uuid
 from string import Template
-from generator.settings import USERS_SET, USERS_USAGE, DEFAULT_CONFIG_PATH
-from generator.options import Options
-from generator.utils import is_valid_uuid_v4, get_variable
 
 import dotenv
 import redis
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ed25519
 
+from generator.options import Options
+from generator.settings import DEFAULT_CONFIG_PATH, USERS_SET, USERS_USAGE
+from generator.utils import get_variable, is_valid_uuid_v4
+
 redis_client: redis.Redis = None
+
 
 def get_client_usage(client_uuid: str, reset: bool = False) -> int:
     global redis_client
     value = redis_client.hget(USERS_USAGE, client_uuid)
 
+    if value is None:
+        return 0
+
     if reset:
         redis_client.hincrby(USERS_USAGE, client_uuid, -value)
+        redis_client.save()
+
     return value
+
 
 def get_client_addr(host_addr: str, client_uuid: str) -> str:
     return host_addr.format(uuid=client_uuid)
@@ -124,6 +126,7 @@ def remove_client(path: pathlib.Path, client_uuid: str) -> None:
         raise RuntimeError("Cannot find the specified client")
 
     redis_client.srem(USERS_SET, client_string)
+    redis_client.srem(USERS_USAGE, client_uuid)
     redis_client.save()
     try:
         os.remove(path / (client_uuid + ".json"))
@@ -131,14 +134,15 @@ def remove_client(path: pathlib.Path, client_uuid: str) -> None:
         print("Could not delete the configuration file for the specified user:")
         print(e)
 
+
 def reset_client_usage(args: argparse.Namespace) -> None:
     """
     Reset the usage of the client(s) specified in the arguments
     """
-    if args.all or args.a:
+    if args.all:
         try:
             print("All users data usages will be purged.\n\nAre you sure? (y, n): ")
-            if input()[0] != 'y':
+            if input()[0] != "y":
                 return
             print("Reset confirmed.")
 
@@ -146,7 +150,11 @@ def reset_client_usage(args: argparse.Namespace) -> None:
             for m in members:
                 client_uuid = m.split("::")[0]
                 print("Client UUID:\t\t" + client_uuid)
-                print("Client Data Usage:\t\t" + str(round(get_client_usage(client_uuid, reset=True) / 1e6)) + " MB")
+                print(
+                    "Client Usage:\t\t"
+                    + str(round(get_client_usage(client_uuid, reset=True) / 1e6))
+                    + " MB"
+                )
                 print("--------------------")
         except Exception as e:
             print("ERORR: " + e)
@@ -156,18 +164,29 @@ def reset_client_usage(args: argparse.Namespace) -> None:
     else:
         for client_uuid in filter(is_valid_uuid_v4, args.reset):
             print("Client UUID:\t\t" + client_uuid)
-            print("Client Data Usage:\t\t" + str(round(get_client_usage(client_uuid, reset=True) / 1e6)) + " MB")
+            print(
+                "Client Usage:\t\t"
+                + str(round(get_client_usage(client_uuid, reset=True) / 1e6))
+                + " MB"
+            )
             print("--------------------")
         print("\nAll these users usage have been reset successfully.")
+
 
 def show_client_usage(args: argparse.Namespace) -> None:
     """
     Show the usage of the client(s) specified in the arguments in descending order
     """
-    if args.all or args.a:
+    if args.all:
         try:
             members = redis_client.smembers(USERS_SET)
-            usage_list = sorted([(get_client_usage(m.split("::")[0]), m.split("::")[0]) for m in members], reverse=True)
+            usage_list = sorted(
+                [
+                    (get_client_usage(m.split("::")[0]), m.split("::")[0])
+                    for m in members
+                ],
+                reverse=True,
+            )
             print("All users data usages in descending order:\n\n")
             for usage, client_uuid in usage_list:
                 print(f"{client_uuid}:\t\t{str(round(usage / 1e6))} MB")
@@ -177,17 +196,21 @@ def show_client_usage(args: argparse.Namespace) -> None:
             print("Opertation terminated.")
     else:
         clients = filter(is_valid_uuid_v4, args.show_usage)
-        usage_list = sorted([(get_client_usage(client), client) for client in clients], reverse=True)
+        usage_list = sorted(
+            [(get_client_usage(client), client) for client in clients], reverse=True
+        )
         for usage, client_uuid in usage_list:
             print(f"{client_uuid}:\t\t{str(round(usage / 1e6))} MB")
             print("--------------------")
 
+
 def main() -> None:
     global redis_client
     dotenv.load_dotenv()
-    args = Options.args
+    opts = Options()
+    args = opts.args
 
-    if args.reset:
+    if not args.reset is None:
         reset_client_usage(args)
         return
 
@@ -216,14 +239,18 @@ def main() -> None:
     if len(args.rem) > 0:
         remove_client(config_path, args.rem)
 
-    if args.list or args.l:
+    if args.list:
         members = redis_client.smembers(USERS_SET)
         for m in members:
             client_uuid = m.split("::")[0]
             print("Client UUID:\t\t" + client_uuid)
             print("Config Address:\t\t" + get_client_addr(host_addr, client_uuid))
             print("Client String:\t\t" + m)
-            print("Client Data Usage:\t\t" + str(round(get_client_usage(client_uuid) / 1e6)) + " MB")
+            print(
+                "Client Usage:\t\t"
+                + str(round(get_client_usage(client_uuid) / 1e6))
+                + " MB"
+            )
             print("--------------------")
 
     if args.show_usage:

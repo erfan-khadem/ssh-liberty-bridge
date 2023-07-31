@@ -1,2 +1,3 @@
 /etc/ssh/*
 .env
+**/__pycache__/

@@ -6,7 +6,7 @@ REDIS_URL="redis://default:password1234@localhost:6379/0"
 LISTEN_ADDR=":2222"
 
 # Storage path for user config files
-CONFIG_PATH="~/ssh-users/"
+CONFIG_PATH="/var/ssh-users/"
 
 # The URL using which the users can download their configuration
 HOST_ADDR="http://localhost:8083/{uuid}.json"

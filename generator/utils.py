@@ -1,6 +1,7 @@
+import argparse
 import os
 import uuid
-import argparse
+
 
 def is_valid_uuid_v4(input_str) -> bool:
     """
@@ -11,6 +12,7 @@ def is_valid_uuid_v4(input_str) -> bool:
         return str(uuid_obj) == input_str
     except ValueError:
         return False
+
 
 def get_variable(
     variable: str,
@@ -52,4 +54,3 @@ def get_variable(
         else:
             print(f"Returning None for {lvar}")
             return None
-        

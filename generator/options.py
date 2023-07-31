@@ -1,14 +1,13 @@
 import argparse
-import redis
 from typing import Optional
-from generator.settings import USERS_SET, USERS_USAGE
-from generator.utils import is_valid_uuid_v4
+
 
 class Options:
     """
     Parses the command line arguments
     """
-    def __init__(self) -> None:
+
+    def __init__(self):
         self._args: Optional[argparse.Namespace] = None
 
     def _parse_args(self) -> argparse.Namespace:
@@ -16,16 +15,27 @@ class Options:
             description="Client management tool for ssh-server"
         )
         parser.add_argument(
-            "--all", "-a", default=False, action="store_true", help="Apply to all clients"
+            "--all",
+            "-a",
+            default=False,
+            action="store_true",
+            help="Apply to all clients",
         )
         parser.add_argument(
-            "--add", type=int, default=0, help="Number of new configurations to generate"
+            "--add",
+            type=int,
+            default=0,
+            help="Number of new configurations to generate",
         )
         parser.add_argument(
             "--rem", type=str, default="", help="Configuration UUID to remove"
         )
         parser.add_argument(
-            "--list", "-l", default=False, action="store_true", help="List configurations"
+            "--list",
+            "-l",
+            default=False,
+            action="store_true",
+            help="List configurations",
         )
         parser.add_argument(
             "--reset", nargs="*", action="append", help="Reset user's data usage"
@@ -34,7 +44,10 @@ class Options:
             "--show-usage", nargs="*", action="append", help="Show user's data usage"
         )
         parser.add_argument(
-            "--config-path", type=str, default="", help="Path to configuration storage area"
+            "--config-path",
+            type=str,
+            default="",
+            help="Path to configuration storage area",
         )
         parser.add_argument(
             "--add-with-uuid",
