@@ -23,9 +23,9 @@ jobs:
 
     - name: Build
       run: |
-        mkdir bir
-        GOOS=linux GOARCH=arm64 go build main.go -o bin/liberty-bridge-arm64
-        GOOS=linux GOARCH=amd64 go build main.go -o bin/liberty-bridge-amd64
+        mkdir bin
+        GOOS=linux GOARCH=arm64 go build -o bin/liberty-bridge-arm64 main.go
+        GOOS=linux GOARCH=amd64 go build -o bin/liberty-bridge-amd64 main.go
         chmod +x bin/*
         ls -R
       
