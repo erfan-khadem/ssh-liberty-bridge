@@ -27,3 +27,6 @@ HOST_KEY_PATH="/etc/ssh-server/"
 # $private_key
 # $host_keys
 TEMPLATE_PATH="./generator/template.json"
+
+# The number of maximum simultaneous connections for each client
+MAX_CONNECTIONS=2

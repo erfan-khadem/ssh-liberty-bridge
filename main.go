@@ -73,7 +73,6 @@ func directTCPIPClosure(rdb *redis.Client) ssh.ChannelHandler {
 			result, _ := io.Copy(ch, dconn)
 			userID := ctx.User()
 			rdb.HIncrBy(context.Background(), "ssh-server:users-usage", userID, result)
-			log.Printf("User %s read %d bytes", conn.Conn.User(), result)
 		}()
 		go func() {
 			defer ch.Close()
@@ -81,7 +80,6 @@ func directTCPIPClosure(rdb *redis.Client) ssh.ChannelHandler {
 			result, _ := io.Copy(dconn, ch)
 			userID := ctx.User()
 			rdb.HIncrBy(context.Background(), "ssh-server:users-usage", userID, result)
-			log.Printf("User %s wrote %d bytes", conn.Conn.User(), result)
 		}()
 	}
 }
@@ -127,6 +125,11 @@ func main() {
 	if len(hostKeyPath) == 0 {
 		hostKeyPath = "/root/etc/ssh/"
 	}
+	maxConnString := os.Getenv("MAX_CONNECTIONS")
+	maxConns, err := strconv.ParseInt(maxConnString, 10, 32)
+	if maxConns == 0 || len(maxConnString) == 0 || err != nil {
+		log.Fatalln("Invalid MAX_CONNECTIONS parameter")
+	}
 	opts, err := redis.ParseURL(redisUrl)
 	if err != nil {
 		log.Fatalln(err)
@@ -148,7 +151,8 @@ func main() {
 			if len(ctx.User()) != 36 { // it isn't a UUID
 				return false
 			}
-			userString := ctx.User() + "::" + string(gossh.MarshalAuthorizedKey(key))
+			userId := ctx.User()
+			userString := userId + "::" + string(gossh.MarshalAuthorizedKey(key))
 			userString = strings.Trim(userString, "\n\t")
 			result := rdb.SIsMember(ctx, "ssh-server:users", userString)
 			res, err := result.Result()
@@ -156,19 +160,20 @@ func main() {
 			if err != nil || !res || doneCh == nil {
 				return false
 			}
-			sget_res := rdb.SIsMember(ctx, "ssh-server:connections", userString)
-			res, err = sget_res.Result()
-			if err != nil || res {
-				log.Printf("Client %s trying to have duplicate connection\n", userString)
+			hget_res := rdb.HGet(ctx, "ssh-server:connections", userId)
+			connCntStr, err := hget_res.Result()
+			connCnt, err2 := strconv.ParseInt(connCntStr, 10, 32)
+			if err != nil || err2 != nil || connCnt >= 2 {
+				log.Printf("Client %s trying to have more than %d connections\n", userString, maxConns)
 				return false // No duplicate connections
 			}
-			sadd_res := rdb.SAdd(ctx, "ssh-server:connections", userString)
+			sadd_res := rdb.HIncrBy(ctx, "ssh-server:connections", userId, 1)
 			if sadd_res.Err() != nil {
 				return false
 			}
 			go func() {
 				<-doneCh
-				rdb.SRem(context.Background(), "ssh-server:connections", userString)
+				rdb.HIncrBy(context.Background(), "ssh-server:connections", userId, -1)
 			}()
 			return true
 		},
