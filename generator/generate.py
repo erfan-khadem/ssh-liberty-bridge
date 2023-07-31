@@ -25,6 +25,8 @@ def get_client_usage(client_uuid: str, reset: bool = False) -> int:
     if value is None:
         return 0
 
+    value = int(value)
+
     if reset:
         redis_client.hincrby(USERS_USAGE, client_uuid, -value)
         redis_client.save()
