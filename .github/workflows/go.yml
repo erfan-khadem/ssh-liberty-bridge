@@ -1,0 +1,103 @@
+# This workflow will build a golang project
+# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-go
+
+name: Go
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+permissions: write-all      
+
+jobs:
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.20'
+
+    - name: Build
+      run: |
+        mkdir bin
+        GOOS=linux GOARCH=arm64 go build -o bin/liberty-bridge-arm64 main.go
+        GOOS=linux GOARCH=amd64 go build -o bin/liberty-bridge-amd64 main.go
+        chmod +x bin/*
+        ls -R
+      
+      
+    - uses: actions/upload-artifact@v3
+      if: ${{  success() }}
+      with:
+          name: artifact
+          path: bin/
+    - name: Tag Repo
+      uses: richardsimko/update-tag@v1.0.6
+      with:
+          tag_name: Prerelease-${{ github.ref_name }}
+      env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - run: |
+          cat > release.txt << 'EOF'
+          Release created at  ${{ env.BUILDTIME }}
+          Synchronize ${{ github.ref_name }} branch code updates, keeping only the latest version
+          EOF
+
+    - name: Upload Prerelease
+      uses: softprops/action-gh-release@v1
+      if: ${{  success() }}
+      with:
+          tag_name: Prerelease-${{ github.ref_name }}
+          files: |
+            bin/*
+          prerelease: true
+          generate_release_notes: true
+          body_path: release.txt
+
+
+  Upload-Release:
+    permissions: write-all
+    if: ${{ github.ref_type=='tag' }}
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Get tags
+        run: |
+          echo "CURRENTVERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+          git fetch --tags
+          echo "PREVERSION=$(git describe --tags --abbrev=0 HEAD^)" >> $GITHUB_ENV
+
+      # - name: Generate release notes
+      #   run: |
+      #     cp ./.github/genReleaseNote.sh ./
+      #     bash ./genReleaseNote.sh -v ${PREVERSION}...${CURRENTVERSION}
+      #     rm ./genReleaseNote.sh
+
+      - uses: actions/download-artifact@v3
+        with:
+          name: artifact
+          path: bin/
+
+      - name: Display structure of downloaded files
+        run: ls -R
+        working-directory: bin
+
+      - name: Upload Release
+        uses: softprops/action-gh-release@v1
+        if: ${{  success() }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: bin/*
+          generate_release_notes: true
+          # body_path: release.md    
