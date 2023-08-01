@@ -163,12 +163,12 @@ func main() {
 			hget_res := rdb.HGet(ctx, "ssh-server:connections", userId)
 			connCntStr, err := hget_res.Result()
 			connCnt, err2 := strconv.ParseInt(connCntStr, 10, 32)
-			if err != nil || err2 != nil || connCnt >= 2 {
+			if err2 == nil && connCnt >= maxConns {
 				log.Printf("Client %s trying to have more than %d connections\n", userString, maxConns)
 				return false // No duplicate connections
 			}
-			sadd_res := rdb.HIncrBy(ctx, "ssh-server:connections", userId, 1)
-			if sadd_res.Err() != nil {
+			hincr_res := rdb.HIncrBy(ctx, "ssh-server:connections", userId, 1)
+			if hincr_res.Err() != nil {
 				return false
 			}
 			go func() {
