@@ -257,7 +257,6 @@ func main() {
 			}
 			result = result[8:]
 			versionStringMutex.Lock()
-			copyVersionString = result
 			server.Version = result
 			versionStringMutex.Unlock()
 			time.Sleep(delayAmount)
