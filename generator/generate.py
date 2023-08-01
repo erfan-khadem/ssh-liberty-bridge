@@ -208,9 +208,14 @@ def show_client_usage(args: argparse.Namespace) -> None:
 
 def main() -> None:
     global redis_client
-    dotenv.load_dotenv()
     opts = Options()
     args = opts.args
+
+    if len(args.env) > 0:
+        if args.env.lower() != "disabled":
+            dotenv.load_dotenv(args.env)
+    else:
+        dotenv.load_dotenv()
 
     if not args.reset is None:
         reset_client_usage(args)
