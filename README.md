@@ -1,4 +1,4 @@
-# SSH-Server
+# SSH-Liberty-Bridge
 
 ## QuickStart Guide
 
@@ -58,7 +58,15 @@ After doing this, don't forget to start and enable redis by running
 systemctl enable --now redis.service
 ```
 
-Now you can build and run the server.
+Now 
+- you can download the latest release file 
+```bash
+wget https://github.com/hiddify/ssh-liberty-bridge/releases/latest/download/ssh-liberty-bridge-$(dpkg --print-architecture)
+mv ssh-liberty-bridge-* ssh-liberty-bridge
+chmod +x ssh-liberty-bridge
+```
+or 
+- you can build and run the server.
 
 ```bash
 go build main.go
