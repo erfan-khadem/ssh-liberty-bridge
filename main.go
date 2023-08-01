@@ -162,6 +162,7 @@ func main() {
 		log.Fatalf("Could not reach the redis server. Aborting: %v", err)
 	}
 	rdb.Del(context.Background(), "ssh-server:connections")
+	var userConnectionCountMutex sync.Mutex
 	server := ssh.Server{
 		LocalPortForwardingCallback: ssh.LocalPortForwardingCallback(func(ctx ssh.Context, dhost string, dport uint32) bool {
 			ip := net.ParseIP(dhost)
@@ -189,6 +190,8 @@ func main() {
 			if err != nil || !res || doneCh == nil {
 				return false
 			}
+			userConnectionCountMutex.Lock()
+			defer userConnectionCountMutex.Unlock()
 			hget_res := rdb.HGet(ctx, "ssh-server:connections", userId)
 			// It doesn't matter if we get an error (the key does not exist),
 			// if there is something more serious it will be handled in HIncrBy
