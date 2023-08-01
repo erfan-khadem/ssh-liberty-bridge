@@ -30,3 +30,10 @@ TEMPLATE_PATH="./generator/template.json"
 
 # The number of maximum simultaneous connections for each client
 MAX_CONNECTIONS=2
+
+# URL to copy server version from. Set to "disabled" to disable this feature
+# Example: localhost:22, gitea:22
+COPY_SERVER_VERSION="localhost:22"
+# In case the URL is disabled or is non responding, use this string instead.
+# Note that it should always start with "SSH-2.0"
+DEFAULT_SERVER_VERSION="SSH-2.0-Go"

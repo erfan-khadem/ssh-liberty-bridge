@@ -4,11 +4,13 @@ import (
 	"context"
 	"io"
 	"log"
+	"math/rand"
 	"net"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gliderlabs/ssh"
@@ -113,34 +115,61 @@ func main() {
 	if err != nil {
 		log.Fatalln(err)
 	}
+
 	redisUrl, ok := os.LookupEnv("REDIS_URL")
 	if !ok {
 		log.Fatalln("REDIS_URL not provided. Consider adding it to .env or the environment variables")
 	}
+
 	listenAddr := os.Getenv("LISTEN_ADDR")
 	if len(listenAddr) == 0 {
 		listenAddr = ":2222"
 	}
+
 	hostKeyPath := os.Getenv("HOST_KEY_PATH")
 	if len(hostKeyPath) == 0 {
 		hostKeyPath = "/root/etc/ssh/"
 	}
+
 	maxConnString := os.Getenv("MAX_CONNECTIONS")
 	maxConns, err := strconv.ParseInt(maxConnString, 10, 32)
 	if maxConns == 0 || len(maxConnString) == 0 || err != nil {
 		log.Fatalln("Invalid MAX_CONNECTIONS parameter")
 	}
+
+	defaultVersionString, ok := os.LookupEnv("DEFAULT_SERVER_VERSION")
+	if !ok {
+		log.Fatalln("DEFAULT_SERVER_VERSION not provided. Aborting")
+	}
+	if !strings.HasPrefix(defaultVersionString, "SSH-2.0-") {
+		log.Fatalln("DEFAULT_SERVER_VERSION should start with `SSH-2.0-`")
+	}
+	defaultVersionString = defaultVersionString[8:]
+	copyVersionString := os.Getenv("COPY_SERVER_VERSION")
+	shouldCopyVersionString := true
+	if len(copyVersionString) == 0 || strings.ToLower(copyVersionString) == "disabled" {
+		shouldCopyVersionString = false
+	}
+
 	opts, err := redis.ParseURL(redisUrl)
 	if err != nil {
 		log.Fatalln(err)
 	}
 	rdb := redis.NewClient(opts) // This is safe to use concurrently
+	pingRes := rdb.Ping(context.Background())
+	_, err = pingRes.Result()
+	if err != nil {
+		log.Fatalf("Could not reach the redis server. Aborting: %v", err)
+	}
 	rdb.Del(context.Background(), "ssh-server:connections")
 	server := ssh.Server{
 		LocalPortForwardingCallback: ssh.LocalPortForwardingCallback(func(ctx ssh.Context, dhost string, dport uint32) bool {
-			// CAUTION!
-			// The user can access everything (even the local network) on the server!
-			return true
+			ip := net.ParseIP(dhost)
+			if ip == nil {
+				return false
+			}
+			result := ip.IsLoopback() || ip.IsLinkLocalMulticast() || ip.IsLinkLocalUnicast() || ip.IsPrivate()
+			return !result
 		}),
 		Addr: listenAddr,
 		ChannelHandlers: map[string]ssh.ChannelHandler{
@@ -153,7 +182,7 @@ func main() {
 			}
 			userId := ctx.User()
 			userString := userId + "::" + string(gossh.MarshalAuthorizedKey(key))
-			userString = strings.Trim(userString, "\n\t")
+			userString = strings.Trim(userString, "\n\t\r")
 			result := rdb.SIsMember(ctx, "ssh-server:users", userString)
 			res, err := result.Result()
 			doneCh := ctx.Done()
@@ -161,7 +190,9 @@ func main() {
 				return false
 			}
 			hget_res := rdb.HGet(ctx, "ssh-server:connections", userId)
-			connCntStr, err := hget_res.Result()
+			// It doesn't matter if we get an error (the key does not exist),
+			// if there is something more serious it will be handled in HIncrBy
+			connCntStr, _ := hget_res.Result()
 			connCnt, err2 := strconv.ParseInt(connCntStr, 10, 32)
 			if err2 == nil && connCnt >= maxConns {
 				log.Printf("Client %s trying to have more than %d connections\n", userString, maxConns)
@@ -179,7 +210,56 @@ func main() {
 		},
 		IdleTimeout: time.Minute * 1,
 		MaxTimeout:  time.Hour * 6,
+		Version:     defaultVersionString,
 	}
+
+	var versionStringMutex sync.Mutex // Not really used now, but can be helpful in the future
+	go func() {
+		if !shouldCopyVersionString {
+			log.Println("Not copying the version string from another server")
+			return
+		}
+		buf := make([]byte, 256)
+		for {
+			delayAmount := time.Hour * 1
+			delayAmount += time.Millisecond * time.Duration(rand.Float32()*3600*1000)
+			conn, err := net.Dial("tcp", copyVersionString)
+			if err != nil {
+				log.Printf("Could not copy the version string from another server: %v\n", err)
+				time.Sleep(delayAmount)
+				continue
+			}
+			n, err := conn.Read(buf)
+			if err != nil || n == len(buf) {
+				log.Printf("Invalid response from the to-be-copied ssh server, len=%d: %v\n", n, err)
+				time.Sleep(delayAmount)
+				conn.Close()
+				continue
+			}
+			conn.Close()
+			// Note! We should remove trailing zeros!
+			resBuf := make([]byte, 0)
+			for _, c := range buf {
+				if c == 0 {
+					break
+				}
+				resBuf = append(resBuf, c)
+			}
+			result := string(resBuf)
+			result = strings.Trim(result, "\n\t\r")
+			if !strings.HasPrefix(result, "SSH-2.0-") {
+				log.Printf("The result from to-be-copied ssh server is invalid, does not start with `SSH-2.0-`")
+				time.Sleep(delayAmount)
+				continue
+			}
+			result = result[8:]
+			versionStringMutex.Lock()
+			copyVersionString = result
+			server.Version = result
+			versionStringMutex.Unlock()
+			time.Sleep(delayAmount)
+		}
+	}()
 
 	hostKeyFiles, err := listKeys(hostKeyPath)
 	if err != nil {
@@ -194,6 +274,8 @@ func main() {
 		server.AddHostKey(hostKey)
 	}
 
-	log.Printf("starting ssh server on %s...\n", listenAddr)
+	time.Sleep(time.Second * 1) // Wait for the version string to settle in
+
+	log.Printf("starting ssh-liberty-bridge on %s...\n", listenAddr)
 	log.Fatal(server.ListenAndServe())
 }
