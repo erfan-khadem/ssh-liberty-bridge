@@ -48,12 +48,23 @@ func directTCPIPClosure(rdb *redis.Client) ssh.ChannelHandler {
 			return
 		}
 
-		if srv.LocalPortForwardingCallback == nil || !srv.LocalPortForwardingCallback(ctx, d.DestAddr, d.DestPort) {
-			newChan.Reject(gossh.Prohibited, "port forwarding is disabled")
+		ipAddr, err := net.ResolveIPAddr("ip4", d.DestAddr)
+		if err != nil {
+			ipAddr, err = net.ResolveIPAddr("ip6", d.DestAddr)
+			if err != nil {
+				newChan.Reject(gossh.Prohibited, "cannot resolve the said address: "+d.DestAddr)
+				return
+			}
+		}
+
+		dest := ipAddr.String()
+
+		if srv.LocalPortForwardingCallback == nil || !srv.LocalPortForwardingCallback(ctx, dest, d.DestPort) {
+			newChan.Reject(gossh.Prohibited, "illegal address")
 			return
 		}
 
-		dest := net.JoinHostPort(d.DestAddr, strconv.FormatInt(int64(d.DestPort), 10))
+		dest = net.JoinHostPort(dest, strconv.FormatInt(int64(d.DestPort), 10))
 
 		var dialer net.Dialer
 		dconn, err := dialer.DialContext(ctx, "tcp", dest)
