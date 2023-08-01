@@ -8,7 +8,7 @@ First, install the python requirements using:
 python3 -m pip install -r generator/requirements.txt
 ```
 
-Note that in some systems, `dotenv` package cannot be installed manually. In that
+Note that in some systems, `python-dotenv` package cannot be installed manually. In that
 case you should install it using your distribution's package manager.
 
 Then copy `env-sample` as `.env` and change its variables according to your
@@ -21,9 +21,11 @@ place and never share the ones that don't end in `.pub` (your public keys) with 
 ```bash
 # Run the following commands as Root
 mkdir -p /tmp/etc/ssh/
-mkdir -p /etc/ssh-server/
+mkdir -p /etc/ssh-liberty-bridge/
 ssh-keygen -A -f /tmp  # Creates the required keys in /tmp/etc/ssh
-cp /tmp/etc/ssh/* /etc/ssh-server/
+rm /tmp/etc/ssh/ssh_host_dsa_key*
+rm /tmp/etc/ssh/ssh_host_rsa_key*
+cp /tmp/etc/ssh/* /etc/ssh-liberty-bridge/
 shred /tmp/etc/ssh/*  # Overwrite the files to really make sure nothing gets left behind
 rm /tmp/etc/ssh/*
 # Make sure to restrict access to /etc/ssh-server/ contents afterwards
@@ -49,7 +51,7 @@ add special characters to your password. We do this because by default connected
 our local network (even if we add basic restrictions it can still be bypassed,
 so lets not endanger our servers by not using a strong password)
 
-After doing this, don't forget to start enable redis by running
+After doing this, don't forget to start and enable redis by running
 
 ```bash
 # Run this as root
@@ -72,7 +74,7 @@ Then run the following command to see the supported commands by your configurati
 python3 main.py --help
 ```
 
-Note that almost any variable specified by `.env` file can be overrided using the cli interface
+Note that almost any variable specified by `.env` file can be overridden using the cli interface
 of the generator or normal environmental variables. Also if the `.env` file is not in its usual
 location, you may provide it to your code using the `--env` flag.
 
