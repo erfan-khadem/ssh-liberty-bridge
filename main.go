@@ -48,12 +48,23 @@ func directTCPIPClosure(rdb *redis.Client) ssh.ChannelHandler {
 			return
 		}
 
-		if srv.LocalPortForwardingCallback == nil || !srv.LocalPortForwardingCallback(ctx, d.DestAddr, d.DestPort) {
-			newChan.Reject(gossh.Prohibited, "port forwarding is disabled")
+		ipAddr, err := net.ResolveIPAddr("ip4", d.DestAddr)
+		if err != nil {
+			ipAddr, err = net.ResolveIPAddr("ip6", d.DestAddr)
+			if err != nil {
+				newChan.Reject(gossh.Prohibited, "cannot resolve the said address: "+d.DestAddr)
+				return
+			}
+		}
+
+		dest := ipAddr.String()
+
+		if srv.LocalPortForwardingCallback == nil || !srv.LocalPortForwardingCallback(ctx, dest, d.DestPort) {
+			newChan.Reject(gossh.Prohibited, "illegal address")
 			return
 		}
 
-		dest := net.JoinHostPort(d.DestAddr, strconv.FormatInt(int64(d.DestPort), 10))
+		dest = net.JoinHostPort(dest, strconv.FormatInt(int64(d.DestPort), 10))
 
 		var dialer net.Dialer
 		dconn, err := dialer.DialContext(ctx, "tcp", dest)
@@ -162,6 +173,7 @@ func main() {
 		log.Fatalf("Could not reach the redis server. Aborting: %v", err)
 	}
 	rdb.Del(context.Background(), "ssh-server:connections")
+	var userConnectionCountMutex sync.Mutex
 	server := ssh.Server{
 		LocalPortForwardingCallback: ssh.LocalPortForwardingCallback(func(ctx ssh.Context, dhost string, dport uint32) bool {
 			ip := net.ParseIP(dhost)
@@ -189,6 +201,8 @@ func main() {
 			if err != nil || !res || doneCh == nil {
 				return false
 			}
+			userConnectionCountMutex.Lock()
+			defer userConnectionCountMutex.Unlock()
 			hget_res := rdb.HGet(ctx, "ssh-server:connections", userId)
 			// It doesn't matter if we get an error (the key does not exist),
 			// if there is something more serious it will be handled in HIncrBy
@@ -254,7 +268,6 @@ func main() {
 			}
 			result = result[8:]
 			versionStringMutex.Lock()
-			copyVersionString = result
 			server.Version = result
 			versionStringMutex.Unlock()
 			time.Sleep(delayAmount)

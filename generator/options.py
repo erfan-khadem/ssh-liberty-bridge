@@ -88,6 +88,9 @@ class Options:
             default="",
             help="Client configuration template file path",
         )
+        parser.add_argument(
+            "--env", type=str, default="", help="Custom path for .env file"
+        )
         return parser.parse_args()
 
     @property
