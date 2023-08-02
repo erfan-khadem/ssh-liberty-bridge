@@ -15,20 +15,32 @@ Then copy `env-sample` as `.env` and change its variables according to your
 own needs. For example you may need to change `TEMPLATE_PATH` if you want to
 use your own template file instead of the one at `generator/template.json`.
 
+Initialize the required directories:
+```bash
+# Run the following commands as Root
+mkdir -p /tmp/etc/ssh/
+mkdir -p /etc/ssh-liberty-bridge/
+```
+
 Then generate host keys for your `ssh-server`. Please put these keys in a safe
 place and never share the ones that don't end in `.pub` (your public keys) with others.
 
 ```bash
 # Run the following commands as Root
-mkdir -p /tmp/etc/ssh/
-mkdir -p /etc/ssh-liberty-bridge/
 ssh-keygen -A -f /tmp  # Creates the required keys in /tmp/etc/ssh
+
+# Remove unneeded key pairs
 rm /tmp/etc/ssh/ssh_host_dsa_key*
 rm /tmp/etc/ssh/ssh_host_rsa_key*
+
+# Copy the keys to the installation directory
 cp /tmp/etc/ssh/* /etc/ssh-liberty-bridge/
-shred /tmp/etc/ssh/*  # Overwrite the files to really make sure nothing gets left behind
+
+# Delete the temporary key files and make sure they are not recoverable
+shred /tmp/etc/ssh/*
 rm /tmp/etc/ssh/*
-# Make sure to restrict access to /etc/ssh-server/ contents afterwards
+
+# Make sure to restrict access to /etc/ssh-liberty-bridge/ contents afterwards
 ```
 
 After this, you have to install `redis` on your server. After doing so, it is of *utmost importance*
@@ -70,6 +82,8 @@ or
 
 ```bash
 go build main.go
+
+# Run this command as root:
 ./main /path/to/.env
 ```
 
@@ -84,7 +98,7 @@ python3 main.py --help
 
 Note that almost any variable specified by `.env` file can be overridden using the cli interface
 of the generator or normal environmental variables. Also if the `.env` file is not in its usual
-location, you may provide it to your code using the `--env` flag.
+location, you may provide it to your code using the `--env` flag. You may also have to run the commands as root to access your user config path. In this case you also have to install python requirements from the first step as root.
 
 For example, to add 5 new users, do the following:
 
