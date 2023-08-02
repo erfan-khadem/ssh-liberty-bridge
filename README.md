@@ -39,8 +39,14 @@ cp /tmp/etc/ssh/* /etc/ssh-liberty-bridge/
 # Delete the temporary key files and make sure they are not recoverable
 shred /tmp/etc/ssh/*
 rm /tmp/etc/ssh/*
+```
 
-# Make sure to restrict access to /etc/ssh-liberty-bridge/ contents afterwards
+And change file ownership and permissions so only your user could read the created files.
+```bash
+# Run these commands from your user but use sudo.
+# Or run as root without sudo and write your username instead of `$USER`
+sudo chown -R $USER:$USER /etc/ssh-liberty-bridge/
+sudo chmod 0600 /etc/ssh-liberty-bridge/*
 ```
 
 After this, you have to install `redis` on your server. After doing so, it is of *utmost importance*
@@ -82,8 +88,6 @@ or
 
 ```bash
 go build main.go
-
-# Run this command as root:
 ./main /path/to/.env
 ```
 
