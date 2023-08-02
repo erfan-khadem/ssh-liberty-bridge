@@ -11,6 +11,7 @@ LISTEN_ADDR=":2222"
 CONFIG_PATH="/var/ssh-users/"
 
 # The URL using which the users can download their configuration
+# You need to manually host the configuration files in on this URL
 HOST_ADDR="http://localhost:8083/{uuid}.json"
 
 # The server address users connect to
