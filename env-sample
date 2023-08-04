@@ -1,5 +1,7 @@
 # It is vital to use a strong password for redis
 # We use database index 0 (the default one). You may change this in production
+# URL format:
+# REDIS_URL="redis://<USERNAME>:<PASSWORD>@<HOSTNAME>:<PORT>/<DATABASE_INDEX>"
 REDIS_URL="redis://default:password1234@localhost:6379/0"
 
 # The address on which the ssh server listens
@@ -9,6 +11,7 @@ LISTEN_ADDR=":2222"
 CONFIG_PATH="/var/ssh-users/"
 
 # The URL using which the users can download their configuration
+# You need to manually host the configuration files in on this URL
 HOST_ADDR="http://localhost:8083/{uuid}.json"
 
 # The server address users connect to
@@ -17,7 +20,7 @@ SERVER_PORT=2222
 
 # The key path of the server
 # Must have trailing slash
-HOST_KEY_PATH="/etc/ssh-server/"
+HOST_KEY_PATH="/etc/ssh-liberty-bridge/"
 
 # User configuration template file.
 # The following variables will be substituted:
