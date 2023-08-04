@@ -128,7 +128,7 @@ def remove_client(path: pathlib.Path, client_uuid: str) -> None:
         raise RuntimeError("Cannot find the specified client")
 
     redis_client.srem(USERS_SET, client_string)
-    redis_client.srem(USERS_USAGE, client_uuid)
+    redis_client.hdel(USERS_USAGE, client_uuid)
     redis_client.save()
     try:
         os.remove(path / (client_uuid + ".json"))
