@@ -8,15 +8,15 @@
 		"servers": [
 			{
 				"tag": "global",
-				"address": "https://1.1.1.1/dns-query",
+				"address": "tcp://1.0.0.1",
 				"address_resolver": "local",
-				"strategy": "prefer_ipv6",
+				"strategy": "prefer_ipv4",
 				"detour": "ssh-out"
 			},
 			{
 				"tag": "local",
 				"address": "8.8.8.8",
-				"strategy": "prefer_ipv6",
+				"strategy": "prefer_ipv4",
 				"detour": "direct-out"
 			},
 			{
@@ -26,14 +26,10 @@
 		],
 		"rules": [
 			{
-				"domain_suffix": [
-					".ir",
-					".edu",
-					".cn",
-					"microsoft.com",
-					"bale.ai",
-					"eitaa.com",
-					"google.com"
+				"domain": [
+					"$server_addr",
+					"github.com",
+					"objects.githubusercontent.com"
 				],
 				"server": "local"
 			}
@@ -52,8 +48,16 @@
 			"strict_route": true,
 			"stack": "system",
 			"sniff": true,
-			"domain_strategy": "prefer_ipv6",
+			"domain_strategy": "prefer_ipv4",
 			"sniff_override_destination": true
+		},
+		{
+		    "listen": "127.0.0.1",
+		    "listen_port": 16450,
+		    "override_address": "8.8.8.8",
+		    "override_port": 53,
+		    "tag": "dns-in",
+		    "type": "direct"
 		}
 	],
 	"outbounds": [
@@ -64,13 +68,16 @@
 			"server_port": $server_port,
 			"user": "$client_uuid",
 			"private_key": $private_key,
-			"host_key": $host_keys,
-			"client_version": "SSH-2.0-OpenSSH_7.4p1"
+			"host_key": $host_keys
 		},
 		{
 			"type": "direct",
 			"tag": "direct-out"
 		},
+		{
+		    "tag": "block",
+		    "type": "block"
+        	},
 		{
 			"type": "dns",
 			"tag": "dns-out"
@@ -79,14 +86,20 @@
 	"route": {
 		"rules": [
 			{
+				"inbound": [
+					"dns-in"
+				],
+				"port": [
+					53
+				],
+				"outbound": "dns-out"
+			},
+			{
 				"domain_suffix": [
-					".ir",
-					".edu",
-					".cn",
-					"microsoft.com",
-					"bale.ai",
-					"eitaa.com",
-					"google.com"
+					".ir"
+				],
+				"geoip":[
+					"ir"
 				],
 				"outbound": "direct-out"
 			},
@@ -97,8 +110,20 @@
 			{
 				"inbound": ["tun-in"],
 				"outbound": "ssh-out"
+			},
+			{
+				"ip_cidr": [
+				    "10.10.34.35/32"
+				],
+				"outbound": "block"
 			}
 		],
-		"auto_detect_interface": true
+		"auto_detect_interface": true,
+		"override_android_vpn": true,
+		"final": "ssh-out",
+		"geoip": {
+		    "download_url": "https:\/\/github.com\/malikshi\/sing-box-geo\/releases\/latest\/download\/geoip.db",
+		    "download_detour": "direct-out"
+		}
 	}
 }
