@@ -17,7 +17,10 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/redis/go-redis/v9"
 	gossh "golang.org/x/crypto/ssh"
+	"golang.org/x/net/proxy"
 )
+
+var SocksProxyAddr string
 
 type localForwardChannelData struct {
 	DestAddr string
@@ -67,10 +70,25 @@ func directTCPIPClosure(rdb *redis.Client) ssh.ChannelHandler {
 		dest = net.JoinHostPort(dest, strconv.FormatInt(int64(d.DestPort), 10))
 
 		var dialer net.Dialer
-		dconn, err := dialer.DialContext(ctx, "tcp", dest)
-		if err != nil {
-			newChan.Reject(gossh.ConnectionFailed, err.Error())
-			return
+		var dconn net.Conn
+
+		if len(SocksProxyAddr) != 0 {
+			pDialer, err := proxy.SOCKS5("tcp", "localhost:1234", nil, proxy.Direct)
+			if err != nil {
+				newChan.Reject(gossh.ConnectionFailed, err.Error())
+				return
+			}
+			dconn, err = pDialer.Dial("tcp", dest)
+			if err != nil {
+				newChan.Reject(gossh.ConnectionFailed, err.Error())
+				return
+			}
+		} else {
+			dconn, err = dialer.DialContext(ctx, "tcp", dest)
+			if err != nil {
+				newChan.Reject(gossh.ConnectionFailed, err.Error())
+				return
+			}
 		}
 
 		ch, reqs, err := newChan.Accept()
@@ -136,6 +154,8 @@ func main() {
 	if len(listenAddr) == 0 {
 		listenAddr = ":2222"
 	}
+
+	SocksProxyAddr = os.Getenv("SOCKS_PROXY")
 
 	hostKeyPath := os.Getenv("HOST_KEY_PATH")
 	if len(hostKeyPath) == 0 {

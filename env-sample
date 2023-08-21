@@ -40,3 +40,7 @@ COPY_SERVER_VERSION="localhost:22"
 # In case the URL is disabled or is non responding, use this string instead.
 # Note that it should always start with "SSH-2.0"
 DEFAULT_SERVER_VERSION="SSH-2.0-Go"
+
+# Keep empty to disable, otherwise write your address like:
+# socks5://localhost:1080
+SOCKS_PROXY=""
