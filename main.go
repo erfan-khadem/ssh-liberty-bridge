@@ -73,7 +73,7 @@ func directTCPIPClosure(rdb *redis.Client) ssh.ChannelHandler {
 		var dconn net.Conn
 
 		if len(SocksProxyAddr) != 0 {
-			pDialer, err := proxy.SOCKS5("tcp", "localhost:1234", nil, proxy.Direct)
+			pDialer, err := proxy.SOCKS5("tcp", SocksProxyAddr, nil, proxy.Direct)
 			if err != nil {
 				newChan.Reject(gossh.ConnectionFailed, err.Error())
 				return
