@@ -137,6 +137,9 @@ func parseHostKeyFile(keyFile string) (ssh.Signer, error) {
 func extractNumbers(input string) ([]uint32, error) {
 	elements := strings.Split(input, ",")
 	numbers := make([]uint32, 0)
+	if len(input) == 0 {
+		return numbers, nil
+	}
 
 	for _, element := range elements {
 		num, err := strconv.ParseUint(strings.TrimSpace(element), 10, 30) // limit to 30 bits just to be on the safe side
